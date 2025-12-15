@@ -1,0 +1,11 @@
+# Images (sample files)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.webp
+
+# OS files
+.DS_Store
+Thumbs.db

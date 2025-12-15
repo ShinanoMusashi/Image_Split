@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Splitter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        header {
+            background: #16213e;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        .container {
+            display: flex;
+            height: calc(100vh - 60px);
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            position: absolute;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a2e;
+            z-index: 100;
+        }
+
+        .upload-zone.hidden {
+            display: none;
+        }
+
+        .upload-box {
+            border: 3px dashed #0f3460;
+            border-radius: 20px;
+            padding: 4rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-box:hover, .upload-box.dragover {
+            border-color: #e94560;
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .upload-box h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #888;
+        }
+
+        .upload-box p {
+            color: #666;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* Main workspace */
+        .workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            overflow: hidden;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background: #111;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #mainCanvas {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        .manual-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .manual-rect {
+            position: absolute;
+            border: 2px solid #e94560;
+            background: rgba(233, 69, 96, 0.2);
+            cursor: move;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: #fff;
+            text-shadow: 0 0 4px #000;
+        }
+
+        .manual-rect .delete-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 24px;
+            height: 24px;
+            background: #e94560;
+            border: none;
+            border-radius: 50%;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        .manual-rect .resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 16px;
+            height: 16px;
+            background: #e94560;
+            cursor: se-resize;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            background: #16213e;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .panel {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .panel h3 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+            margin-bottom: 1rem;
+        }
+
+        .mode-toggle {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .mode-toggle button {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 6px;
+            background: #0f3460;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .mode-toggle button.active {
+            background: #e94560;
+            color: #fff;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .control-row label {
+            flex: 1;
+            color: #aaa;
+        }
+
+        .control-row input[type="number"] {
+            width: 60px;
+            padding: 0.5rem;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: #16213e;
+            color: #fff;
+            text-align: center;
+        }
+
+        .control-row select {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: #16213e;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .control-row span {
+            color: #666;
+        }
+
+        .orientation-toggle, .scale-toggle {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .orientation-toggle button, .scale-toggle button {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .orientation-toggle button.active, .scale-toggle button.active {
+            border-color: #e94560;
+            color: #e94560;
+        }
+
+        .add-rect-btn {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px dashed #0f3460;
+            border-radius: 6px;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .add-rect-btn:hover {
+            border-color: #e94560;
+            color: #e94560;
+        }
+
+        /* Preview */
+        .preview-grid {
+            display: grid;
+            gap: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .preview-tile {
+            background: #0f3460;
+            border-radius: 4px;
+            aspect-ratio: var(--tile-ratio, 0.707);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .preview-tile img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .preview-tile span {
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        /* Export button */
+        .export-btn {
+            padding: 1rem;
+            border: none;
+            border-radius: 8px;
+            background: #e94560;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .export-btn:hover {
+            background: #ff6b6b;
+        }
+
+        .export-btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+        }
+
+        /* Info text */
+        .info-text {
+            font-size: 0.85rem;
+            color: #666;
+            text-align: center;
+        }
+
+        /* Change image button */
+        .change-image-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .change-image-btn:hover {
+            border-color: #e94560;
+            color: #e94560;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Image Splitter</h1>
+    </header>
+
+    <div class="upload-zone" id="uploadZone">
+        <div class="upload-box" id="uploadBox">
+            <h2>Drop image here</h2>
+            <p>or click to select a file</p>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="workspace">
+            <div class="canvas-container" id="canvasContainer">
+                <canvas id="mainCanvas"></canvas>
+                <svg class="grid-overlay" id="gridOverlay"></svg>
+                <div class="manual-overlay" id="manualOverlay"></div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="panel">
+                <h3>Mode</h3>
+                <div class="mode-toggle">
+                    <button id="gridModeBtn" class="active">Grid</button>
+                    <button id="manualModeBtn">Manual</button>
+                </div>
+            </div>
+
+            <div class="panel" id="gridControls">
+                <h3>Grid Settings</h3>
+                <div class="control-row">
+                    <label>Paper Size</label>
+                    <select id="paperSize">
+                        <option value="b5">B5 (176×250mm)</option>
+                        <option value="a4">A4 (210×297mm)</option>
+                        <option value="a3">A3 (297×420mm)</option>
+                        <option value="letter">Letter (8.5×11")</option>
+                        <option value="legal">Legal (8.5×14")</option>
+                        <option value="tabloid">Tabloid (11×17")</option>
+                    </select>
+                </div>
+                <div class="control-row">
+                    <label>Columns</label>
+                    <input type="number" id="gridCols" value="2" min="1" max="10">
+                </div>
+                <div class="control-row">
+                    <label>Rows</label>
+                    <input type="number" id="gridRows" value="2" min="1" max="10">
+                </div>
+                <div class="control-row">
+                    <label>Orientation</label>
+                </div>
+                <div class="orientation-toggle">
+                    <button id="portraitBtn" class="active" title="Portrait">Portrait</button>
+                    <button id="landscapeBtn" title="Landscape">Landscape</button>
+                </div>
+                <div class="control-row" style="margin-top: 0.75rem;">
+                    <label>Scaling</label>
+                </div>
+                <div class="scale-toggle">
+                    <button id="fillBtn" class="active" title="Fill (may crop)">Fill</button>
+                    <button id="fitBtn" title="Fit (may have whitespace)">Fit</button>
+                </div>
+            </div>
+
+            <div class="panel" id="manualControls" style="display: none;">
+                <h3>Manual Settings</h3>
+                <div class="control-row">
+                    <label>Paper Size</label>
+                    <select id="manualPaperSize">
+                        <option value="b5">B5 (176×250mm)</option>
+                        <option value="a4">A4 (210×297mm)</option>
+                        <option value="a3">A3 (297×420mm)</option>
+                        <option value="letter">Letter (8.5×11")</option>
+                        <option value="legal">Legal (8.5×14")</option>
+                        <option value="tabloid">Tabloid (11×17")</option>
+                    </select>
+                </div>
+                <div class="control-row">
+                    <label>Orientation</label>
+                </div>
+                <div class="orientation-toggle">
+                    <button id="manualPortraitBtn" class="active">Portrait</button>
+                    <button id="manualLandscapeBtn">Landscape</button>
+                </div>
+                <button class="add-rect-btn" id="addRectBtn">+ Add Rectangle</button>
+            </div>
+
+            <div class="panel">
+                <h3>Preview</h3>
+                <div class="preview-grid" id="previewGrid">
+                    <div class="preview-tile"><span>No tiles</span></div>
+                </div>
+            </div>
+
+            <button class="export-btn" id="exportBtn" disabled>Export as ZIP</button>
+
+            <button class="change-image-btn" id="changeImageBtn">Change Image</button>
+
+            <p class="info-text" id="paperInfo">B5: 176mm × 250mm</p>
+        </div>
+    </div>
+
+    <script>
+        // Paper sizes: width x height in mm (portrait orientation)
+        const PAPER_SIZES = {
+            b5: { name: 'B5', width: 176, height: 250, dpi300: { w: 2079, h: 2953 } },
+            a4: { name: 'A4', width: 210, height: 297, dpi300: { w: 2480, h: 3508 } },
+            a3: { name: 'A3', width: 297, height: 420, dpi300: { w: 3508, h: 4961 } },
+            letter: { name: 'Letter', width: 215.9, height: 279.4, dpi300: { w: 2550, h: 3300 } },
+            legal: { name: 'Legal', width: 215.9, height: 355.6, dpi300: { w: 2550, h: 4200 } },
+            tabloid: { name: 'Tabloid', width: 279.4, height: 431.8, dpi300: { w: 3300, h: 5100 } }
+        };
+
+        function getPaperRatio(paperKey, orientation) {
+            const paper = PAPER_SIZES[paperKey];
+            if (orientation === 'portrait') {
+                return paper.width / paper.height;
+            } else {
+                return paper.height / paper.width;
+            }
+        }
+
+        function getPaperDimensions(paperKey, orientation) {
+            const paper = PAPER_SIZES[paperKey];
+            if (orientation === 'portrait') {
+                return { width: paper.dpi300.w, height: paper.dpi300.h };
+            } else {
+                return { width: paper.dpi300.h, height: paper.dpi300.w };
+            }
+        }
+
+        // State
+        let state = {
+            image: null,
+            imageData: null,
+            mode: 'grid', // 'grid' or 'manual'
+            paperSize: 'b5',
+            gridCols: 2,
+            gridRows: 2,
+            orientation: 'portrait',
+            scaleMode: 'fill', // 'fill' or 'fit'
+            manualRects: [],
+            canvasRect: null
+        };
+
+        // DOM Elements
+        const uploadZone = document.getElementById('uploadZone');
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const mainCanvas = document.getElementById('mainCanvas');
+        const ctx = mainCanvas.getContext('2d');
+        const canvasContainer = document.getElementById('canvasContainer');
+        const gridOverlay = document.getElementById('gridOverlay');
+        const manualOverlay = document.getElementById('manualOverlay');
+        const previewGrid = document.getElementById('previewGrid');
+        const exportBtn = document.getElementById('exportBtn');
+
+        // Mode buttons
+        const gridModeBtn = document.getElementById('gridModeBtn');
+        const manualModeBtn = document.getElementById('manualModeBtn');
+        const gridControls = document.getElementById('gridControls');
+        const manualControls = document.getElementById('manualControls');
+
+        // Grid controls
+        const gridColsInput = document.getElementById('gridCols');
+        const gridRowsInput = document.getElementById('gridRows');
+        const portraitBtn = document.getElementById('portraitBtn');
+        const landscapeBtn = document.getElementById('landscapeBtn');
+        const fillBtn = document.getElementById('fillBtn');
+        const fitBtn = document.getElementById('fitBtn');
+
+        // Manual controls
+        const manualPortraitBtn = document.getElementById('manualPortraitBtn');
+        const manualLandscapeBtn = document.getElementById('manualLandscapeBtn');
+        const addRectBtn = document.getElementById('addRectBtn');
+
+        const changeImageBtn = document.getElementById('changeImageBtn');
+        const paperSizeSelect = document.getElementById('paperSize');
+        const manualPaperSizeSelect = document.getElementById('manualPaperSize');
+        const paperInfo = document.getElementById('paperInfo');
+
+        function updatePaperInfo() {
+            const paper = PAPER_SIZES[state.paperSize];
+            paperInfo.textContent = `${paper.name}: ${paper.width}mm × ${paper.height}mm`;
+        }
+
+        // File upload handling
+        uploadBox.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.classList.add('dragover');
+        });
+
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.classList.remove('dragover');
+        });
+
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        });
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                loadImage(file);
+            }
+        }
+
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    state.image = img;
+                    state.imageData = e.target.result;
+                    uploadZone.classList.add('hidden');
+                    drawCanvas();
+                    updateOverlay();
+                    updatePreview();
+                    exportBtn.disabled = false;
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function drawCanvas() {
+            if (!state.image) return;
+
+            const container = canvasContainer.getBoundingClientRect();
+            const imgRatio = state.image.width / state.image.height;
+            const containerRatio = container.width / container.height;
+
+            let canvasWidth, canvasHeight;
+
+            if (imgRatio > containerRatio) {
+                canvasWidth = container.width * 0.95;
+                canvasHeight = canvasWidth / imgRatio;
+            } else {
+                canvasHeight = container.height * 0.95;
+                canvasWidth = canvasHeight * imgRatio;
+            }
+
+            mainCanvas.width = canvasWidth;
+            mainCanvas.height = canvasHeight;
+            mainCanvas.style.width = canvasWidth + 'px';
+            mainCanvas.style.height = canvasHeight + 'px';
+
+            ctx.drawImage(state.image, 0, 0, canvasWidth, canvasHeight);
+
+            // Update overlay positions
+            const rect = mainCanvas.getBoundingClientRect();
+            const containerRect = canvasContainer.getBoundingClientRect();
+
+            state.canvasRect = {
+                left: rect.left - containerRect.left,
+                top: rect.top - containerRect.top,
+                width: canvasWidth,
+                height: canvasHeight
+            };
+
+            gridOverlay.style.left = state.canvasRect.left + 'px';
+            gridOverlay.style.top = state.canvasRect.top + 'px';
+            gridOverlay.setAttribute('width', canvasWidth);
+            gridOverlay.setAttribute('height', canvasHeight);
+
+            manualOverlay.style.left = state.canvasRect.left + 'px';
+            manualOverlay.style.top = state.canvasRect.top + 'px';
+            manualOverlay.style.width = canvasWidth + 'px';
+            manualOverlay.style.height = canvasHeight + 'px';
+        }
+
+        // Mode switching
+        gridModeBtn.addEventListener('click', () => {
+            state.mode = 'grid';
+            gridModeBtn.classList.add('active');
+            manualModeBtn.classList.remove('active');
+            gridControls.style.display = 'block';
+            manualControls.style.display = 'none';
+            gridOverlay.style.display = 'block';
+            manualOverlay.style.display = 'none';
+            updateOverlay();
+            updatePreview();
+        });
+
+        manualModeBtn.addEventListener('click', () => {
+            state.mode = 'manual';
+            manualModeBtn.classList.add('active');
+            gridModeBtn.classList.remove('active');
+            manualControls.style.display = 'block';
+            gridControls.style.display = 'none';
+            manualOverlay.style.display = 'block';
+            gridOverlay.style.display = 'none';
+            updateOverlay();
+            updatePreview();
+        });
+
+        // Paper size controls
+        paperSizeSelect.addEventListener('change', () => {
+            state.paperSize = paperSizeSelect.value;
+            updatePaperInfo();
+            updateOverlay();
+            updatePreview();
+        });
+
+        manualPaperSizeSelect.addEventListener('change', () => {
+            state.paperSize = manualPaperSizeSelect.value;
+            updatePaperInfo();
+        });
+
+        // Grid controls
+        gridColsInput.addEventListener('change', () => {
+            state.gridCols = parseInt(gridColsInput.value) || 1;
+            updateOverlay();
+            updatePreview();
+        });
+
+        gridRowsInput.addEventListener('change', () => {
+            state.gridRows = parseInt(gridRowsInput.value) || 1;
+            updateOverlay();
+            updatePreview();
+        });
+
+        portraitBtn.addEventListener('click', () => {
+            state.orientation = 'portrait';
+            portraitBtn.classList.add('active');
+            landscapeBtn.classList.remove('active');
+            updateOverlay();
+            updatePreview();
+        });
+
+        landscapeBtn.addEventListener('click', () => {
+            state.orientation = 'landscape';
+            landscapeBtn.classList.add('active');
+            portraitBtn.classList.remove('active');
+            updateOverlay();
+            updatePreview();
+        });
+
+        fillBtn.addEventListener('click', () => {
+            state.scaleMode = 'fill';
+            fillBtn.classList.add('active');
+            fitBtn.classList.remove('active');
+            updateOverlay();
+            updatePreview();
+        });
+
+        fitBtn.addEventListener('click', () => {
+            state.scaleMode = 'fit';
+            fitBtn.classList.add('active');
+            fillBtn.classList.remove('active');
+            updateOverlay();
+            updatePreview();
+        });
+
+        // Manual controls
+        manualPortraitBtn.addEventListener('click', () => {
+            state.orientation = 'portrait';
+            manualPortraitBtn.classList.add('active');
+            manualLandscapeBtn.classList.remove('active');
+        });
+
+        manualLandscapeBtn.addEventListener('click', () => {
+            state.orientation = 'landscape';
+            manualLandscapeBtn.classList.add('active');
+            manualPortraitBtn.classList.remove('active');
+        });
+
+        addRectBtn.addEventListener('click', () => {
+            if (!state.canvasRect) return;
+
+            const ratio = getPaperRatio(state.paperSize, state.orientation);
+            const rectHeight = state.canvasRect.height * 0.4;
+            const rectWidth = rectHeight * ratio;
+
+            const rect = {
+                id: Date.now(),
+                x: 20 + state.manualRects.length * 30,
+                y: 20 + state.manualRects.length * 30,
+                width: rectWidth,
+                height: rectHeight,
+                orientation: state.orientation,
+                paperSize: state.paperSize
+            };
+
+            state.manualRects.push(rect);
+            renderManualRects();
+            updatePreview();
+        });
+
+        function renderManualRects() {
+            manualOverlay.innerHTML = '';
+
+            state.manualRects.forEach((rect, index) => {
+                const div = document.createElement('div');
+                div.className = 'manual-rect';
+                div.style.left = rect.x + 'px';
+                div.style.top = rect.y + 'px';
+                div.style.width = rect.width + 'px';
+                div.style.height = rect.height + 'px';
+                div.textContent = index + 1;
+
+                // Delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = '×';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    state.manualRects = state.manualRects.filter(r => r.id !== rect.id);
+                    renderManualRects();
+                    updatePreview();
+                });
+                div.appendChild(deleteBtn);
+
+                // Resize handle
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                div.appendChild(resizeHandle);
+
+                // Dragging
+                let isDragging = false;
+                let isResizing = false;
+                let startX, startY, startRectX, startRectY, startWidth, startHeight;
+
+                div.addEventListener('mousedown', (e) => {
+                    if (e.target === resizeHandle) {
+                        isResizing = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        startWidth = rect.width;
+                        startHeight = rect.height;
+                    } else if (e.target !== deleteBtn) {
+                        isDragging = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        startRectX = rect.x;
+                        startRectY = rect.y;
+                    }
+                    e.preventDefault();
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (isDragging) {
+                        const dx = e.clientX - startX;
+                        const dy = e.clientY - startY;
+                        rect.x = Math.max(0, Math.min(state.canvasRect.width - rect.width, startRectX + dx));
+                        rect.y = Math.max(0, Math.min(state.canvasRect.height - rect.height, startRectY + dy));
+                        div.style.left = rect.x + 'px';
+                        div.style.top = rect.y + 'px';
+                    } else if (isResizing) {
+                        const dy = e.clientY - startY;
+                        const newHeight = Math.max(50, startHeight + dy);
+                        const ratio = getPaperRatio(rect.paperSize || state.paperSize, rect.orientation);
+                        rect.height = newHeight;
+                        rect.width = newHeight * ratio;
+                        div.style.width = rect.width + 'px';
+                        div.style.height = rect.height + 'px';
+                    }
+                });
+
+                document.addEventListener('mouseup', () => {
+                    if (isDragging || isResizing) {
+                        isDragging = false;
+                        isResizing = false;
+                        updatePreview();
+                    }
+                });
+
+                manualOverlay.appendChild(div);
+            });
+        }
+
+        function updateOverlay() {
+            if (!state.canvasRect || state.mode !== 'grid') return;
+
+            const { width, height } = state.canvasRect;
+            const cols = state.gridCols;
+            const rows = state.gridRows;
+
+            const paperRatio = getPaperRatio(state.paperSize, state.orientation);
+            const gridRatio = (cols * paperRatio) / rows;
+            const imageRatio = width / height;
+
+            let gridWidth, gridHeight, offsetX = 0, offsetY = 0;
+
+            if (state.scaleMode === 'fill') {
+                // Fill: grid covers entire image, may extend beyond
+                if (gridRatio > imageRatio) {
+                    gridWidth = width;
+                    gridHeight = width / gridRatio;
+                    offsetY = (height - gridHeight) / 2;
+                } else {
+                    gridHeight = height;
+                    gridWidth = height * gridRatio;
+                    offsetX = (width - gridWidth) / 2;
+                }
+            } else {
+                // Fit: grid fits inside image, may have margins
+                if (gridRatio > imageRatio) {
+                    gridWidth = width;
+                    gridHeight = width / gridRatio;
+                    offsetY = (height - gridHeight) / 2;
+                } else {
+                    gridHeight = height;
+                    gridWidth = height * gridRatio;
+                    offsetX = (width - gridWidth) / 2;
+                }
+            }
+
+            const cellWidth = gridWidth / cols;
+            const cellHeight = gridHeight / rows;
+
+            let svg = '';
+
+            // Background rect to show grid area
+            svg += `<rect x="${offsetX}" y="${offsetY}" width="${gridWidth}" height="${gridHeight}" fill="none" stroke="#e94560" stroke-width="2" stroke-dasharray="5,5"/>`;
+
+            // Grid lines
+            for (let c = 1; c < cols; c++) {
+                const x = offsetX + c * cellWidth;
+                svg += `<line x1="${x}" y1="${offsetY}" x2="${x}" y2="${offsetY + gridHeight}" stroke="#e94560" stroke-width="1"/>`;
+            }
+
+            for (let r = 1; r < rows; r++) {
+                const y = offsetY + r * cellHeight;
+                svg += `<line x1="${offsetX}" y1="${y}" x2="${offsetX + gridWidth}" y2="${y}" stroke="#e94560" stroke-width="1"/>`;
+            }
+
+            // Cell labels
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const x = offsetX + c * cellWidth + cellWidth / 2;
+                    const y = offsetY + r * cellHeight + cellHeight / 2;
+                    const label = `${r + 1}-${c + 1}`;
+                    svg += `<text x="${x}" y="${y}" fill="#fff" font-size="16" text-anchor="middle" dominant-baseline="middle" style="text-shadow: 0 0 4px #000">${label}</text>`;
+                }
+            }
+
+            gridOverlay.innerHTML = svg;
+
+            // Store grid info for export
+            state.gridInfo = {
+                offsetX, offsetY, gridWidth, gridHeight, cellWidth, cellHeight
+            };
+        }
+
+        function updatePreview() {
+            if (!state.image) {
+                previewGrid.innerHTML = '<div class="preview-tile"><span>No tiles</span></div>';
+                return;
+            }
+
+            const tiles = getTiles();
+            if (tiles.length === 0) {
+                previewGrid.innerHTML = '<div class="preview-tile"><span>No tiles</span></div>';
+                return;
+            }
+
+            const cols = state.mode === 'grid' ? state.gridCols : Math.min(3, tiles.length);
+            const ratio = getPaperRatio(state.paperSize, state.orientation);
+
+            previewGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            previewGrid.style.setProperty('--tile-ratio', ratio);
+
+            previewGrid.innerHTML = '';
+
+            tiles.forEach((tile, index) => {
+                const div = document.createElement('div');
+                div.className = 'preview-tile';
+
+                const previewCanvas = document.createElement('canvas');
+                const previewCtx = previewCanvas.getContext('2d');
+
+                // Calculate source coordinates in original image
+                const scaleX = state.image.width / state.canvasRect.width;
+                const scaleY = state.image.height / state.canvasRect.height;
+
+                const srcX = tile.x * scaleX;
+                const srcY = tile.y * scaleY;
+                const srcW = tile.width * scaleX;
+                const srcH = tile.height * scaleY;
+
+                previewCanvas.width = 150;
+                previewCanvas.height = 150 / ratio;
+
+                if (state.scaleMode === 'fill' || state.mode === 'manual') {
+                    previewCtx.drawImage(state.image, srcX, srcY, srcW, srcH, 0, 0, previewCanvas.width, previewCanvas.height);
+                } else {
+                    // Fit mode - add white background
+                    previewCtx.fillStyle = '#fff';
+                    previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+                    // Calculate fit dimensions
+                    const imgRatio = srcW / srcH;
+                    const tileRatio = previewCanvas.width / previewCanvas.height;
+
+                    let drawW, drawH, drawX, drawY;
+                    if (imgRatio > tileRatio) {
+                        drawW = previewCanvas.width;
+                        drawH = drawW / imgRatio;
+                        drawX = 0;
+                        drawY = (previewCanvas.height - drawH) / 2;
+                    } else {
+                        drawH = previewCanvas.height;
+                        drawW = drawH * imgRatio;
+                        drawX = (previewCanvas.width - drawW) / 2;
+                        drawY = 0;
+                    }
+
+                    previewCtx.drawImage(state.image, srcX, srcY, srcW, srcH, drawX, drawY, drawW, drawH);
+                }
+
+                const img = document.createElement('img');
+                img.src = previewCanvas.toDataURL('image/jpeg', 0.8);
+                div.appendChild(img);
+
+                previewGrid.appendChild(div);
+            });
+        }
+
+        function getTiles() {
+            if (!state.canvasRect) return [];
+
+            if (state.mode === 'grid') {
+                if (!state.gridInfo) return [];
+
+                const { offsetX, offsetY, cellWidth, cellHeight } = state.gridInfo;
+                const tiles = [];
+
+                for (let r = 0; r < state.gridRows; r++) {
+                    for (let c = 0; c < state.gridCols; c++) {
+                        tiles.push({
+                            x: offsetX + c * cellWidth,
+                            y: offsetY + r * cellHeight,
+                            width: cellWidth,
+                            height: cellHeight,
+                            label: `tile_${r + 1}_${c + 1}`
+                        });
+                    }
+                }
+                return tiles;
+            } else {
+                return state.manualRects.map((rect, i) => ({
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                    label: `tile_${i + 1}`
+                }));
+            }
+        }
+
+        // Export
+        exportBtn.addEventListener('click', async () => {
+            if (!state.image) return;
+
+            const tiles = getTiles();
+            if (tiles.length === 0) {
+                alert('No tiles to export');
+                return;
+            }
+
+            exportBtn.disabled = true;
+            exportBtn.textContent = 'Exporting...';
+
+            try {
+                const zip = new JSZip();
+                const dims = getPaperDimensions(state.paperSize, state.orientation);
+                const outputWidth = dims.width;
+                const outputHeight = dims.height;
+
+                const scaleX = state.image.width / state.canvasRect.width;
+                const scaleY = state.image.height / state.canvasRect.height;
+
+                for (const tile of tiles) {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    canvas.width = outputWidth;
+                    canvas.height = outputHeight;
+
+                    const srcX = tile.x * scaleX;
+                    const srcY = tile.y * scaleY;
+                    const srcW = tile.width * scaleX;
+                    const srcH = tile.height * scaleY;
+
+                    if (state.scaleMode === 'fill' || state.mode === 'manual') {
+                        ctx.drawImage(state.image, srcX, srcY, srcW, srcH, 0, 0, outputWidth, outputHeight);
+                    } else {
+                        // Fit mode
+                        ctx.fillStyle = '#fff';
+                        ctx.fillRect(0, 0, outputWidth, outputHeight);
+
+                        const imgRatio = srcW / srcH;
+                        const tileRatio = outputWidth / outputHeight;
+
+                        let drawW, drawH, drawX, drawY;
+                        if (imgRatio > tileRatio) {
+                            drawW = outputWidth;
+                            drawH = drawW / imgRatio;
+                            drawX = 0;
+                            drawY = (outputHeight - drawH) / 2;
+                        } else {
+                            drawH = outputHeight;
+                            drawW = drawH * imgRatio;
+                            drawX = (outputWidth - drawW) / 2;
+                            drawY = 0;
+                        }
+
+                        ctx.drawImage(state.image, srcX, srcY, srcW, srcH, drawX, drawY, drawW, drawH);
+                    }
+
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+                    zip.file(`${tile.label}.jpg`, blob);
+                }
+
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                const paperName = PAPER_SIZES[state.paperSize].name.toLowerCase();
+                saveAs(zipBlob, `${paperName}_tiles.zip`);
+
+            } catch (err) {
+                console.error('Export error:', err);
+                alert('Export failed: ' + err.message);
+            }
+
+            exportBtn.disabled = false;
+            exportBtn.textContent = 'Export as ZIP';
+        });
+
+        // Change image
+        changeImageBtn.addEventListener('click', () => {
+            uploadZone.classList.remove('hidden');
+            state.image = null;
+            state.imageData = null;
+            state.manualRects = [];
+            exportBtn.disabled = true;
+            fileInput.value = '';
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (state.image) {
+                drawCanvas();
+                updateOverlay();
+                renderManualRects();
+            }
+        });
+    </script>
+</body>
+</html>
