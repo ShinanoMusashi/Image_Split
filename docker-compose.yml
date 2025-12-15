@@ -1,0 +1,7 @@
+services:
+  image-splitter:
+    build: .
+    container_name: image-splitter
+    ports:
+      - "8080:80"
+    restart: unless-stopped
